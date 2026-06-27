@@ -36,9 +36,10 @@ assessed (no server access).
 - **Opcode:** every packet id is a **signed byte** produced by a per-descriptor `getId()` virtual and written as the
   leading `VarInt` of each packet's `write()`. It is a runtime object field, not a compile-time immediate, so the
   numeric `id ↔ class` table is built at startup and is not present in static data.
-- **Status:** the transport, crypto, serializer, packet model, and opcode *mechanism* are recovered. The numeric
-  opcode table and the confirmed login-packet identity require one dynamic capture on real arm64 hardware; the exact
-  hook points are documented below.
+- **Status:** static analysis is complete. Transport, crypto, serializer, packet model, opcode *mechanism*, and the
+  126-entry packet descriptor set are recovered. The numeric `id ↔ packet` pairing is proven to be runtime-assigned
+  (not present in the image) and, together with the confirmed login-packet identity, requires exactly one startup
+  capture on real arm64; the exact hook points are documented below.
 
 Full write-ups live in [`docs/`](docs/). The protocol summary is [`docs/08_PROTOCOL_SPEC.md`](docs/08_PROTOCOL_SPEC.md).
 
@@ -184,6 +185,16 @@ registry is built at startup rather than baked into data, the numeric `id ↔ cl
 only the mechanism is. (Composed list/array sub-codecs also lead with a `VarInt`, but there it is an element count,
 not an id — these are distinguished in the catalog.)
 
+The packet set itself is bounded and enumerable: a 126-entry descriptor pointer table at `0x85ED220` (~120 distinct;
+the tail is duplicated padding), each a DynamicHub exposing `write() = *(+0x100)`, `new() = *(+0x108)`,
+`read() = *(+0x110)`. What is *not* in the image is the numeric pairing. At registration the id is produced by a
+virtual `getId()` resolved on a runtime-built `PacketType` (reached through a hashmap lookup; slot `+0x2A8` on the
+entry class), range-checked to a signed byte, then written into a freshly-allocated holder that has no static
+counterpart. Five independent disassembly proofs (no readable id field on the descriptor, non-uniform `+0x2A8` slots,
+zeroed wrapper fields at registration, field-load — not immediate — operands in every `write()`) establish that the
+numeric `id ↔ class` table cannot be recovered without running the engine. That avenue is closed; details in
+[`docs/08f_static_opcode_table_attempt.md`](docs/08f_static_opcode_table_attempt.md).
+
 ### Writer field-layout catalog (excerpt)
 
 From the 96 `write()` bodies; identities are structural guesses pending dynamic confirmation:
@@ -217,9 +228,12 @@ native side adds zero framing, a hook at the boundary yields exact packet bytes:
 
 1. `writeVarInt @0x680ea30` — log `(return address, first arg)`. The return address identifies the writer; the first
    `VarInt` of each top-level `write()` is the live packet id. This yields the `id ↔ writer` table directly.
-2. `loc_76397F0 @0x76397f0` (registration) — at each call read the descriptor and observe `getId()` at
-   `descriptor+0x2A8`, logging `(packet write fn at hub+0x100, signed-byte id)`. This builds the **entire** table at
-   startup, before any traffic — the cleanest single hook.
+2. `loc_76397F0 @0x76397f0` (registration) — fires **126 times at startup**, once per packet, before any traffic. Per
+   call, read the descriptor hub from `X2` (→ its `write fn = *(hub+0x100)`, which links to the field-layout catalog)
+   and the signed-byte id returned by the `getId()` virtual, capturing `W0` right after `BLR @0x76398b0`. Logging
+   `(descriptor hub, write fn, signed-byte id)` for all 126 calls reconstructs the **entire**
+   `id ↔ packet ↔ serializer` table in a single launch — the definitive capture, independent of which packets are
+   ever sent. Afterwards dump the registry singleton `qword_AF979E8` to cross-check.
 3. `GnsNative.send @0x811fd3c` / `receive @0x811f534` — dump the `ByteBuffer` (`GetDirectBufferAddress`); first byte =
    opcode, rest = payload. Cross-check against the serializer layout.
 4. `writeString @0x680df60` during auth — the two consecutive UTF-8 args equal to the `onTokenReceived` token pin the
@@ -261,6 +275,10 @@ assets/    images
 
 Game binaries, decompiler output, and assets are intentionally excluded (`.gitignore`); only original analysis and
 tooling are tracked.
+
+## Contact
+
+Questions, corrections, or notes — Discord: **`arisunee1337`**.
 
 ## Disclaimer
 
