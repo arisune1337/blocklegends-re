@@ -1,0 +1,27 @@
+# Copyrighted game binaries — never commit
+*.so
+*.apk
+*.xapk
+*.aab
+*.dex
+*.i64
+*.idb
+*.jar
+*.keystore
+
+# Decompiler / disassembler output (copyrighted source)
+jadx_base/
+jadx_*/
+asset_samples/
+**/sources/
+**/resources/
+
+# Large string dumps
+strings_all.txt
+bl_readable.txt
+bl_classes.txt
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
