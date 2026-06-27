@@ -279,9 +279,3 @@ tooling are tracked.
 ## Contact
 
 Questions, corrections, or notes — Discord: **`arisunee1337`**.
-
-## Disclaimer
-
-This is interoperability and security research. The contents are reverse-engineering *findings*, not a ready-to-run
-tool, and no game binaries, source, or assets are redistributed. Use within the applicable terms of service and local
-law.
